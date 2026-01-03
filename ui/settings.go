@@ -160,7 +160,7 @@ func ShowSettings(cfg *config.Config, onSave func(*config.Config)) {
 
 	// Status indicator
 	statusIcon := canvas.NewCircle(color.NRGBA{R: 100, G: 100, B: 100, A: 255})
-	statusIcon.SetMinSize(fyne.NewSize(12, 12))
+	statusIcon.Resize(fyne.NewSize(12, 12))
 	statusLabel := widget.NewLabel("Checking connection status...")
 
 	statusRow := container.NewHBox(statusIcon, statusLabel)
