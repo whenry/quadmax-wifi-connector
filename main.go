@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -30,9 +32,18 @@ var (
 	stateMutex    sync.RWMutex
 	stopPolling   chan struct{}
 	mStatusItem   *systray.MenuItem
+	lockFile      *os.File
 )
 
 func main() {
+	// Check for single instance
+	if !acquireLock() {
+		showNotification("Already Running", "Quadmax WiFi Connector is already running.")
+		fmt.Println("Quadmax WiFi Connector is already running.")
+		return
+	}
+	defer releaseLock()
+
 	// Initialize UI before systray
 	ui.InitApp()
 
@@ -43,8 +54,45 @@ func main() {
 		fmt.Printf("Warning: Could not load config: %v\n", err)
 	}
 
+	// Run Fyne event loop in background (required for windows to work)
+	go ui.RunApp()
+
 	// Run systray (this is blocking on Windows)
 	systray.Run(onReady, onExit)
+}
+
+func getLockFilePath() string {
+	tempDir := os.TempDir()
+	return filepath.Join(tempDir, "quadmax-wifi-connector.lock")
+}
+
+func acquireLock() bool {
+	lockPath := getLockFilePath()
+	var err error
+	lockFile, err = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		if os.IsExist(err) {
+			// Lock file exists, check if process is still running
+			// Try to remove stale lock and retry
+			os.Remove(lockPath)
+			lockFile, err = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if err != nil {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	// Write PID to lock file
+	fmt.Fprintf(lockFile, "%d", os.Getpid())
+	return true
+}
+
+func releaseLock() {
+	if lockFile != nil {
+		lockFile.Close()
+		os.Remove(getLockFilePath())
+	}
 }
 
 func onReady() {
